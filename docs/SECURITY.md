@@ -31,7 +31,8 @@ The design keeps this possible without rewriting the core:
 
 * Phone identity verified with 6-digit OTPs: HMAC-hashed, single-use (atomic delete), 5-minute TTL, destroyed after 5 wrong
   attempts, and request rate limited per phone and per IP. The mock provider is refused in production unless
-  `ALLOW_MOCK_OTP_IN_PRODUCTION=true` is explicitly set, and the code-revealing dev endpoint never exists in production.
+  `ALLOW_MOCK_OTP_IN_PRODUCTION=true` is explicitly set. That flag also enables the code-revealing endpoint, which turns phone
+  verification off entirely: use it only for private demos (the current Railway deployment runs this way).
 * Login returns the same error and the same timing for an unknown number and a wrong password (a dummy hash is verified).
 * Access tokens: HS256 JWTs (15 min) carrying user, session and device ids. Each request also checks a Redis revocation list,
   so logout takes effect immediately rather than when the token expires.

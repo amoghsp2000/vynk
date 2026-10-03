@@ -8,6 +8,8 @@ STUN/TURN and Web Push.
 > **Encryption:** traffic is encrypted in transit (TLS; DTLS-SRTP for call audio), but **messages are stored on the
 > server unencrypted. Parley is not end-to-end encrypted.** See [docs/SECURITY.md](docs/SECURITY.md) for the path to E2EE.
 
+**Live demo:** https://server-production-5b78.up.railway.app (Railway, demo mode: the verification code is shown on screen, and there's no TURN relay; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#railway-current-live-deployment)).
+
 ## Quick start
 
 Requires Docker with Compose v2.

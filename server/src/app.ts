@@ -5,6 +5,7 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import { env } from './config/env.js';
 import { loggerOptions } from './lib/logger.js';
+import { registerStaticClient } from './static.js';
 import { AppError } from './lib/errors.js';
 import { enforce, limits } from './lib/rateLimit.js';
 import { pool } from './database/pool.js';
@@ -23,7 +24,11 @@ const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
 export async function buildApp() {
   const app = Fastify({
     logger: loggerOptions,
-    trustProxy: env.TRUST_PROXY,
+    // A hop count trusts exactly that many proxies in front of us.
+    trustProxy:
+      typeof env.TRUST_PROXY === 'number'
+        ? (_addr: string, hop: number) => hop < (env.TRUST_PROXY as number)
+        : env.TRUST_PROXY,
     bodyLimit: 256 * 1024, // JSON only; media goes straight to object storage
     // Correlation id: honour a well-formed incoming X-Request-Id, else mint one.
     genReqId: (req) => {
@@ -84,9 +89,11 @@ export async function buildApp() {
     return reply.status(500).send({ error: { code: 'internal', message: 'Internal server error', request_id: req.id } });
   });
 
-  app.setNotFoundHandler((req, reply) =>
-    reply.status(404).send({ error: { code: 'not_found', message: `Route ${req.method} ${req.url} not found` } }),
-  );
+  const spa = env.STATIC_DIR ? await registerStaticClient(app, env.STATIC_DIR) : null;
+  app.setNotFoundHandler(async (req, reply) => {
+    if (spa && (await spa.serveIndex(req, reply))) return reply;
+    return reply.status(404).send({ error: { code: 'not_found', message: `Route ${req.method} ${req.url} not found` } });
+  });
 
   // Probed every few seconds by orchestrators: keep them out of the request log.
   app.get('/health/live', { logLevel: 'silent' }, async () => ({ ok: true }));

@@ -21,7 +21,15 @@ const schema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** pretty = human-readable (needs the pino-pretty dev dependency); json = structured, for containers. */
   LOG_FORMAT: z.enum(['pretty', 'json']).optional(),
-  TRUST_PROXY: bool.default(false),
+  /**
+   * false = ignore X-Forwarded-For; true = trust it (single proxy that overwrites
+   * it, e.g. our nginx); N = trust exactly N proxy hops (PaaS edges that append).
+   */
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((v) => (v === 'true' ? true : v === 'false' ? false : Number(v)))
+    .pipe(z.union([z.boolean(), z.number().int().min(1).max(5)])),
   INSTANCE_ID: z.string().optional(),
 
   DATABASE_URL: z.string().url(),
@@ -50,6 +58,9 @@ const schema = z.object({
   S3_ACCESS_KEY: z.string().min(1),
   S3_SECRET_KEY: z.string().min(1),
   S3_FORCE_PATH_STYLE: bool.default(true),
+  S3_AUTO_CREATE_BUCKET: bool.default(true),
+  /** Set bucket CORS to CORS_ORIGINS on boot (managed S3 providers; MinIO uses its own env config). */
+  S3_CONFIGURE_CORS: bool.default(false),
 
   STUN_URLS: csv,
   TURN_URLS: csv,
@@ -65,6 +76,8 @@ const schema = z.object({
   CALL_RING_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
   CALL_RECONNECT_GRACE_MS: z.coerce.number().int().positive().default(30_000),
   JOBS_ENABLED: bool.default(true),
+  /** Serve the built web client from this process (single-service deployments). */
+  STATIC_DIR: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

@@ -1,5 +1,38 @@
 # Deployment
 
+## Railway (current live deployment)
+
+Live at **https://server-production-5b78.up.railway.app** (project `vynk`, environment `production`).
+
+The free plan allows 3 services and 1 volume per project, so the layout is:
+
+| Railway resource | What it runs |
+|---|---|
+| `Postgres` (database template, uses the one volume) | PostgreSQL |
+| `redis` (image `redis:7-alpine`, no volume) | Redis. Everything the app keeps there is ephemeral or rebuilt automatically, so persistence isn't required. |
+| `server` (root `Dockerfile`) | **API + web client in one process**: the server serves the built SPA with the same headers nginx would send (`STATIC_DIR`). |
+| Bucket `vynk-media` | S3-compatible object storage for avatars/status media (presigned POST works; CORS set on boot via `S3_CONFIGURE_CORS=true`). |
+
+Deploy a new version from the repo root:
+
+```bash
+railway up --service server --ci
+```
+
+Railway-specific settings (already set on the `server` service):
+
+| Variable | Value / why |
+|---|---|
+| `HOST` | `::` (Railway's private network is IPv6) |
+| `PORT` | `8080` (the public domain targets this port) |
+| `TRUST_PROXY` | `1` (trust exactly one hop: Railway's edge) |
+| `REDIS_URL` | `redis://redis.railway.internal:6379?family=0` (`family=0` lets ioredis resolve IPv6) |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference variable) |
+| `S3_*` | the Railway bucket's endpoint/credentials, `S3_FORCE_PATH_STYLE=false`, `S3_AUTO_CREATE_BUCKET=false`, `S3_CONFIGURE_CORS=true` |
+| `OTP_PROVIDER` + `ALLOW_MOCK_OTP_IN_PRODUCTION` | `mock` + `true`: **demo mode**. The verify screen shows the code; no real phone verification. Replace with a real SMS provider before public use. |
+| `STUN_URLS` | Google + Cloudflare public STUN. **No TURN**: Railway has no UDP, so calls can fail behind strict/symmetric NAT. Add a hosted TURN service or a coturn VPS and set `TURN_URLS`/`TURN_SECRET`. |
+
+
 ## Production with Docker Compose
 
 Requirements: a Linux host with a public IP, Docker, DNS records for `DOMAIN`, `media.DOMAIN` and a TURN host name

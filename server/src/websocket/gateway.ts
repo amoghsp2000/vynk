@@ -180,10 +180,14 @@ async function dispatch(conn: Connection, raw: string) {
   ack(result);
 }
 
-/** X-Forwarded-For is only honoured behind a trusted proxy (TRUST_PROXY=true). */
+/** Same rules as Fastify's trustProxy: X-Forwarded-For is only honoured behind trusted proxies. */
 function clientIp(req: IncomingMessage) {
-  const fwd = env.TRUST_PROXY ? (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() : undefined;
-  return fwd || req.socket.remoteAddress || '';
+  const socketIp = req.socket.remoteAddress || '';
+  if (env.TRUST_PROXY === false) return socketIp;
+  const chain = ((req.headers['x-forwarded-for'] as string | undefined) ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (!chain.length) return socketIp;
+  // N hops: the address the outermost trusted proxy saw; `true`: leftmost entry.
+  return (env.TRUST_PROXY === true ? chain[0] : chain[chain.length - env.TRUST_PROXY]) ?? socketIp;
 }
 
 function originAllowed(req: IncomingMessage) {

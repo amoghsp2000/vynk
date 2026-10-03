@@ -1,5 +1,8 @@
 import {
+  CreateBucketCommand,
   DeleteObjectCommand,
+  HeadBucketCommand,
+  PutBucketCorsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   S3Client,
@@ -63,4 +66,30 @@ export async function readHead(key: string, bytes = 64): Promise<Buffer> {
 
 export async function deleteObject(key: string) {
   await internal.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+}
+
+/**
+ * Creates the bucket if it doesn't exist (e.g. a fresh MinIO on a PaaS without
+ * an init container). The bucket stays private: all access is presigned.
+ */
+export async function ensureBucket() {
+  try {
+    await internal.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
+  } catch (err: any) {
+    const status = err?.$metadata?.httpStatusCode;
+    if (status !== 404 && err?.name !== 'NotFound' && err?.name !== 'NoSuchBucket') throw err;
+    await internal.send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
+  }
+}
+
+/** Lets browsers on the app's origins upload (presigned POST) and read (presigned GET) directly. */
+export async function configureBucketCors() {
+  await internal.send(
+    new PutBucketCorsCommand({
+      Bucket: env.S3_BUCKET,
+      CORSConfiguration: {
+        CORSRules: [{ AllowedOrigins: env.CORS_ORIGINS, AllowedMethods: ['GET', 'POST'], AllowedHeaders: ['*'], MaxAgeSeconds: 3600 }],
+      },
+    }),
+  );
 }

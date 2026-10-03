@@ -31,9 +31,9 @@ class TwilioOtpProvider implements OtpProvider {
 }
 
 export const otpProvider: OtpProvider = env.OTP_PROVIDER === 'twilio' ? new TwilioOtpProvider() : new MockOtpProvider();
-// The dev endpoint that reveals codes is never exposed in production, even
-// when the mock provider is allowed for a staging demo.
-export const mockOtpEnabled = otpProvider.name === 'mock' && !isProd;
+// The endpoint that reveals codes exists in development, and in production only
+// when ALLOW_MOCK_OTP_IN_PRODUCTION is explicitly set (private demo deployments).
+export const mockOtpEnabled = otpProvider.name === 'mock' && (!isProd || env.ALLOW_MOCK_OTP_IN_PRODUCTION);
 
 export const maskPhone = (p: string) => `${p.slice(0, 3)}***${p.slice(-2)}`;
 
