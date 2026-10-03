@@ -1,0 +1,75 @@
+# Rendered by the nginx image's envsubst step. Only ${API_UPSTREAM} and
+# ${MEDIA_ORIGIN} are substituted; nginx's own $variables are left alone.
+
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
+server {
+  listen 80;
+  server_name _;
+  root /usr/share/nginx/html;
+  server_tokens off;
+  client_max_body_size 300k; # JSON API only; media goes straight to object storage
+
+  # Real client IP: only trust X-Forwarded-For from the reverse proxy in front
+  # (Caddy in production). Clients can't spoof their IP past this point.
+  set_real_ip_from ${REAL_IP_FROM};
+  real_ip_header X-Forwarded-For;
+  real_ip_recursive on;
+
+  # --- security headers for the SPA ---
+  # style-src needs 'unsafe-inline' for React style attributes; scripts do not.
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${MEDIA_ORIGIN}; media-src 'self' blob: ${MEDIA_ORIGIN}; connect-src 'self' ws: wss: ${MEDIA_ORIGIN}; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+  add_header X-Content-Type-Options nosniff always;
+  add_header Referrer-Policy no-referrer always;
+  add_header Permissions-Policy "microphone=(self), camera=(), geolocation=()" always;
+  add_header Cross-Origin-Opener-Policy same-origin always;
+
+  location /api/ {
+    proxy_pass http://${API_UPSTREAM};
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-Id $request_id;
+  }
+
+  location = /ws {
+    proxy_pass http://${API_UPSTREAM};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    # Longer than the server heartbeat so idle-but-alive sockets aren't cut.
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+  }
+
+  location /health/ {
+    proxy_pass http://${API_UPSTREAM};
+  }
+
+  # The service worker must always be revalidated so updates roll out.
+  location = /sw.js {
+    add_header Cache-Control "no-cache" always;
+    add_header Content-Security-Policy "default-src 'self'" always;
+    try_files $uri =404;
+  }
+
+  location /assets/ {
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    add_header X-Content-Type-Options nosniff always;
+    try_files $uri =404;
+  }
+
+  location / {
+    add_header Cache-Control "no-cache" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${MEDIA_ORIGIN}; media-src 'self' blob: ${MEDIA_ORIGIN}; connect-src 'self' ws: wss: ${MEDIA_ORIGIN}; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header Permissions-Policy "microphone=(self), camera=(), geolocation=()" always;
+    try_files $uri /index.html;
+  }
+}

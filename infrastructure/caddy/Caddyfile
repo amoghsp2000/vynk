@@ -1,0 +1,21 @@
+# Production edge: automatic HTTPS (Let's Encrypt) for the app and media hosts.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	# SPA + /api + /ws (nginx in the client container proxies to the API).
+	reverse_proxy client:80
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}
+
+# Presigned uploads/downloads go straight to object storage. The Host header is
+# preserved, which the S3 signature covers.
+media.{$DOMAIN} {
+	request_body {
+		max_size 32MB
+	}
+	reverse_proxy minio:9000
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}
